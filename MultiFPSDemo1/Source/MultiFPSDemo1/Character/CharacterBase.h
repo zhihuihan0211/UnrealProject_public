@@ -41,6 +41,8 @@ protected:
 	void SlowSpeedWalkAction();
 	void NormalSpeedWalkAction();
 
+	void InputFireWeaponPressed();
+	void InputFireWeaponReleased();
 	
 
 public:	
@@ -64,6 +66,39 @@ public:
 	void ServerNormalSpeedWalkAction_Implementation();
 	bool ServerNormalSpeedWalkAction_Validate();
 
-#pragma endregion 
+	UFUNCTION(Client,Reliable)
+	void ClientEquipWeaponParimary();
+	
+	UFUNCTION(Client,Reliable)
+	void ClientWeaponFire();
+
+#pragma endregion
+
+
+#pragma region Weapons
+public:
+	UFUNCTION()
+	void EquipWeapon_Primary(class AWeaponBaseServer* CurrWeapon);
+
+
+
+private:
+
+    void StartWithKindOfWeapon();
+	void PurchaseWeapon(UClass* WeaponClass);
+
+	void PrimaryWeapon_Fire();
+	void PrimaryWeapon_StopFire();
+
+	class AWeaponBaseClient* GetCurrentClientWeapon();
+	
+	
+	UPROPERTY(meta=(AllowPrivateAccess="true"))
+	class AWeaponBaseServer* Server_PrimaryWeapon;
+
+	UPROPERTY(meta=(AllowPrivateAccess="true"))
+	class AWeaponBaseClient* Clinet_PrimaryWeapon;
+
+#pragma endregion
 	
 };

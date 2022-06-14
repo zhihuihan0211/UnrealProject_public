@@ -2,7 +2,8 @@
 
 
 #include "CharacterBase.h"
-
+#include "MultiFPSDemo1/Weapons/WeaponBaseServer.h"
+#include "MultiFPSDemo1/Weapons/WeaponBaseClient.h"
 #include "Camera/CameraAnim.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
@@ -26,6 +27,8 @@ ACharacterBase::ACharacterBase()
 void ACharacterBase::BeginPlay()
 {
 	Super::BeginPlay();
+
+	StartWithKindOfWeapon();
 	
 }
 
@@ -45,6 +48,9 @@ void ACharacterBase::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 
 	PlayerInputComponent->BindAction(TEXT("SlowSpeedWalk"),IE_Pressed,this,&ACharacterBase::SlowSpeedWalkAction);
 	PlayerInputComponent->BindAction(TEXT("SlowSpeedWalk"),IE_Released,this,&ACharacterBase::NormalSpeedWalkAction);
+
+	PlayerInputComponent->BindAction(TEXT("Fire"),IE_Pressed,this,&ACharacterBase::InputFireWeaponPressed);
+	PlayerInputComponent->BindAction(TEXT("Fire"),IE_Released,this,&ACharacterBase::InputFireWeaponReleased);
 	
 	PlayerInputComponent->BindAction(TEXT("Jump"),IE_Pressed,this,&ACharacterBase::JumpStart);
 	PlayerInputComponent->BindAction(TEXT("Jump"),IE_Released,this,&ACharacterBase::JumpStop);
@@ -76,6 +82,118 @@ bool ACharacterBase::ServerNormalSpeedWalkAction_Validate()
 {
 	return true;
 
+}
+
+void ACharacterBase::ClientEquipWeaponParimary_Implementation()
+{
+	if(Server_PrimaryWeapon!=nullptr)
+	{
+		FActorSpawnParameters SpawnParameters;
+		SpawnParameters.Owner = this;
+		SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Clinet_PrimaryWeapon = GetWorld()->SpawnActor<AWeaponBaseClient>(Server_PrimaryWeapon->ClientWeaponClass,GetActorTransform(),SpawnParameters);
+
+		if(Clinet_PrimaryWeapon)
+		{
+			Clinet_PrimaryWeapon->K2_AttachToComponent(FPArmMesh,TEXT("WeaponSocket"),
+				EAttachmentRule::SnapToTarget,EAttachmentRule::SnapToTarget,EAttachmentRule::SnapToTarget,true);
+		}
+	}
+}
+
+void ACharacterBase::ClientWeaponFire_Implementation()
+{
+	AWeaponBaseClient* CurrentClientWeapon=GetCurrentClientWeapon();
+	if(CurrentClientWeapon)
+	{
+		CurrentClientWeapon->PlayFireAnimation();
+	}
+}
+
+void ACharacterBase::EquipWeapon_Primary(AWeaponBaseServer* CurrWeapon_Server)
+{
+	if(!Server_PrimaryWeapon)
+	{
+		if(CurrWeapon_Server!=nullptr)
+		{
+			Server_PrimaryWeapon = CurrWeapon_Server;
+			Server_PrimaryWeapon->SetOwner(this);
+			Server_PrimaryWeapon->K2_AttachToComponent(GetMesh(),TEXT("Weapon_Rifle"),
+				EAttachmentRule::SnapToTarget,EAttachmentRule::SnapToTarget,EAttachmentRule::SnapToTarget,true);
+
+			ClientEquipWeaponParimary_Implementation();
+		}
+	}
+	
+	//if(CurrWeapon)
+}
+
+void ACharacterBase::StartWithKindOfWeapon()
+{
+	if(HasAuthority())
+	{
+		UClass* BuleprintWeaponClass = StaticLoadClass(AWeaponBaseServer::StaticClass(),nullptr,TEXT("Blueprint'/Game/BluePrints/Weapons/AK47/WeaponServer_Ak47.WeaponServer_Ak47_c'"));
+		PurchaseWeapon(BuleprintWeaponClass);
+	}
+}
+
+void ACharacterBase::PurchaseWeapon(UClass* WeaponClass)
+{
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.Owner = this;
+	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	
+	if(WeaponClass->IsChildOf(AWeaponBaseServer::StaticClass()))
+	{
+		AWeaponBaseServer* WeaponServer = GetWorld()->SpawnActor<AWeaponBaseServer>(WeaponClass,GetActorTransform(),SpawnParameters);
+		if(WeaponServer!=nullptr)
+		{
+			WeaponServer->OnEquipWeapon();
+			EquipWeapon_Primary(WeaponServer);
+		}
+	}
+}
+
+void ACharacterBase::PrimaryWeapon_Fire()
+{
+	UE_LOG(LogTemp,Warning,TEXT("PrimaryWeapon_Fire"));
+
+	//Server
+
+	//clinet
+	ClientWeaponFire();
+	
+}
+
+void ACharacterBase::PrimaryWeapon_StopFire()
+{
+	UE_LOG(LogTemp,Warning,TEXT("PrimaryWeapon_StopFire"));
+}
+
+AWeaponBaseClient* ACharacterBase::GetCurrentClientWeapon()
+{
+	AWeaponBaseClient* TargetWeapon=nullptr;
+	
+	 if(Clinet_PrimaryWeapon!=nullptr)
+	 {
+	 	switch(Clinet_PrimaryWeapon->KindOfWeapon)
+	 	{
+	 		case EWeaponType::AK47:
+	 			{
+	 				TargetWeapon = Clinet_PrimaryWeapon;
+	 			}
+	 			break;
+	 			
+	 		default:
+	 			{
+	 				
+	 			}
+	 			break;
+	 	}
+	 }
+	
+	 return TargetWeapon;
+	
 }
 
 void ACharacterBase::MoveForward(float AxisValue)
@@ -118,5 +236,40 @@ void ACharacterBase::NormalSpeedWalkAction()
 {
 	GetCharacterMovement()->MaxWalkSpeed = 600.0f;
 	ServerNormalSpeedWalkAction();
+}
+
+void ACharacterBase::InputFireWeaponPressed()
+{
+	if(!Server_PrimaryWeapon)
+		return ;
+	switch (Server_PrimaryWeapon->KindOfWeapon)
+	{
+		case EWeaponType::AK47:
+			{
+				PrimaryWeapon_Fire();
+			}
+			break;
+	
+		default:
+			break;
+	}
+}
+
+void ACharacterBase::InputFireWeaponReleased()
+{
+	if(!Server_PrimaryWeapon)
+		return ;
+	
+	switch (Server_PrimaryWeapon->KindOfWeapon)
+	{
+		case EWeaponType::AK47:
+			{
+				PrimaryWeapon_StopFire();
+			}
+			break;
+		
+		default:
+			break;
+	}
 }
 
